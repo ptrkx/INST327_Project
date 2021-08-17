@@ -1,0 +1,76 @@
+DROP VIEW IF EXISTS south_restaurants;
+CREATE VIEW south_restaurants AS
+    SELECT rating AS "Restaurant Rating", CONCAT(street_address, ", ", city, ", ", state, " ", zip_code) AS "Address"
+    FROM restaurants r
+		JOIN cuisine_type ct
+			ON r.cuisine_id = ct.cuisine_id
+	WHERE sub_region_id IN
+		(SELECT sub_region_id
+        FROM locations
+        WHERE sub_region_id = 2) AND rating > 3
+	ORDER BY city;
+    
+DROP VIEW IF EXISTS cheap_excursions;
+CREATE VIEW cheap_excursions AS
+    SELECT DISTINCT
+        organization_name AS 'Organization Name',
+        street_address AS ' Street Address',
+        zip_code AS ' Zip Code',
+        state AS 'State',
+        phone_number AS 'Phone Number',
+        cost_per_person AS 'Cost Per Person'
+    FROM
+        excursion_orgs
+            JOIN
+        excursion_type_join USING (organization_id)
+    WHERE
+        cost_per_person < 80
+    ORDER BY organization_name DESC , 'Cost Per Person';
+
+CREATE OR REPLACE VIEW viewOrganizationsInLahaina AS
+	SELECT organization_name AS "Organization Name" , COUNT(type_id) AS "Number of Events Offered", 
+    CONCAT(FORMAT(AVG(time_consumption),2), ' hour(s)') AS "Average Amount of Time",
+	CONCAT(street_address, ', ', city, ', ', state, ' ' , zip_code) AS "Full Address"
+	FROM excursion_orgs JOIN excursion_type_join USING(organization_id)
+	WHERE city = 'Lahaina'
+	GROUP BY organization_name;
+
+DROP VIEW IF EXISTS amenities_view;
+CREATE VIEW amenities_view AS
+	SELECT hotel_name AS 'Hotel Name', city AS 'City', hotel_phone_number AS 'Phone Number', COUNT(DISTINCT amenities_id) AS 'Number of Amenities' 
+	FROM hotel_overview
+	JOIN hotel_amenities_join USING(hotel_id)
+	JOIN amenities USING(amenities_id)
+	GROUP BY city
+	HAVING COUNT(DISTINCT amenities_id) > 8;
+
+DROP VIEW IF EXISTS hotels;
+SET sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));
+
+CREATE VIEW hotels AS
+	SELECT hotel_name AS "Hotel Name", CONCAT(street_address, ", ", city, ", ", state, " ", zip_code) 
+		AS Address, amenities_name AS "Amenities", ROUND(AVG(cost_per_night), 2) AS "Average Room Price", 
+		bed_type AS "Bed Type", t.room_view AS "Room View", t.room_type AS "Room Type"
+	FROM amenities a
+		JOIN hotel_amenities_join haj
+			ON a.amenities_id = haj.amenities_id
+		JOIN hotel_overview ho
+			ON haj.hotel_id = ho.hotel_id
+		JOIN room r
+			ON haj.hotel_id = r.hotel_id
+		JOIN
+			(SELECT r.room_id, room_view, room_type
+			FROM room_view rv
+				JOIN room r
+					ON rv.room_view_id = r.room_view_id
+				JOIN room_type rt
+					ON r.room_type_id = rt.room_type_id) t
+			ON r.room_id = t.room_id
+		JOIN beds_room_join brj
+			ON t.room_id = brj.room_id
+		JOIN beds b
+			ON brj.bed_id = b.bed_id
+	WHERE t.room_view = "Oceanfront" and t.room_type = "suite"
+	GROUP BY hotel_name
+	HAVING AVG(cost_per_night) < 800 AND bed_type = "king";
+
